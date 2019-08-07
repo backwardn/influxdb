@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -736,6 +737,16 @@ func decodeGetLogsRequest(ctx context.Context, r *http.Request) (*getLogsRequest
 	return req, nil
 }
 
+type runsBySchedule []*influxdb.Run
+
+func (r runsBySchedule) Len() int { return len(r) }
+func (r runsBySchedule) Less(i, j int) bool {
+	timeI, _ := r[i].ScheduledForTime()
+	timeJ, _ := r[j].ScheduledForTime()
+	return timeJ.Before(timeI)
+}
+func (r runsBySchedule) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+
 func (h *TaskHandler) handleGetRuns(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -785,6 +796,8 @@ func (h *TaskHandler) handleGetRuns(w http.ResponseWriter, r *http.Request) {
 		h.HandleHTTPError(ctx, err, w)
 		return
 	}
+
+	sort.Sort(runsBySchedule(runs))
 
 	if err := encodeResponse(ctx, w, http.StatusOK, newRunsResponse(runs, req.filter.Task)); err != nil {
 		logEncodingError(h.logger, r, err)
